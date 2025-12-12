@@ -95,14 +95,14 @@ fi
 
 # Install Python dependencies for root (service)
 log_info "Installing Python dependencies for service (root)..."
-pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml --break-system-packages 2>/dev/null || \
-pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml
+pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml pyqtgraph --break-system-packages 2>/dev/null || \
+pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml pyqtgraph
 
 # Install Python dependencies for the user who invoked sudo (GUI)
 if [ -n "$SUDO_USER" ]; then
     log_info "Installing Python dependencies for GUI user ($SUDO_USER)..."
-    sudo -u "$SUDO_USER" pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml --break-system-packages 2>/dev/null || \
-    sudo -u "$SUDO_USER" pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml
+    sudo -u "$SUDO_USER" pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml pyqtgraph --break-system-packages 2>/dev/null || \
+    sudo -u "$SUDO_USER" pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml pyqtgraph
 fi
 
 # Install Python package system-wide

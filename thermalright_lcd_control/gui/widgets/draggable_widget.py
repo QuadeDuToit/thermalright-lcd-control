@@ -99,6 +99,12 @@ class DraggableWidget(QLabel):
         if event.button() == Qt.LeftButton:
             self.dragging = False
             self.setCursor(Qt.ArrowCursor)
+            
+            # Snap to grid if enabled
+            main_window = self.window()
+            if hasattr(main_window, 'snap_to_grid_position'):
+                snapped_x, snapped_y = main_window.snap_to_grid_position(self.x(), self.y())
+                self.move(snapped_x, snapped_y)
 
     def enterEvent(self, event):
         """Change cursor on hover"""

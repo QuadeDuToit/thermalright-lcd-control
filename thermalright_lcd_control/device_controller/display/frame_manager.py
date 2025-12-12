@@ -12,6 +12,7 @@ from PIL import Image, ImageSequence
 from .config import BackgroundType, DisplayConfig
 from ..metrics.cpu_metrics import CpuMetrics
 from ..metrics.gpu_metrics import GpuMetrics
+from ..metrics.memory_metrics import MemoryMetrics
 from ...common.logging_config import get_service_logger
 
 # Try to import OpenCV for video support
@@ -46,6 +47,7 @@ class FrameManager:
             # Initialize metrics collectors
             self.cpu_metrics = CpuMetrics()
             self.gpu_metrics = GpuMetrics()
+            self.memory_metrics = MemoryMetrics()
             # Variables for real-time metrics
             self.current_metrics = self._get_current_metric()
             # Start metrics update
@@ -226,6 +228,10 @@ class FrameManager:
             # Collect CPU and GPU metrics
             cpu_data = self.cpu_metrics.get_all_metrics()
             gpu_data = self.gpu_metrics.get_all_metrics()
+            # Update memory metrics
+            self.memory_metrics.update()
+            memory_usage = self.memory_metrics.get_usage_percentage()
+            
             # Update metrics in a thread-safe manner
             return {
                 # CPU metrics
@@ -238,7 +244,10 @@ class FrameManager:
                 'gpu_usage': gpu_data.get('usage_percentage'),
                 'gpu_frequency': gpu_data.get('frequency'),
                 'gpu_vendor': gpu_data.get('vendor'),
-                'gpu_name': gpu_data.get('name')
+                'gpu_name': gpu_data.get('name'),
+                
+                # Memory metrics
+                'memory_usage': memory_usage
             }
         except Exception as e:
             self.logger.error(f"Error updating metrics: {e}")

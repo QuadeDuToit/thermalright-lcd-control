@@ -14,9 +14,11 @@ from .tabs.media_tab import MediaTab
 from .tabs.themes_tab import ThemesTab
 from .utils.config_loader import load_config
 from .widgets.draggable_widget import *
+from .widgets.graph_overlay_widget import CpuGraphWidget, GpuGraphWidget, MemoryGraphWidget
 from ..common.logging_config import get_gui_logger
 from ..device_controller.metrics.cpu_metrics import CpuMetrics
 from ..device_controller.metrics.gpu_metrics import GpuMetrics
+from ..device_controller.metrics.memory_metrics import MemoryMetrics
 
 
 class MediaPreviewUI(QMainWindow):
@@ -33,6 +35,7 @@ class MediaPreviewUI(QMainWindow):
         self.config = load_config(config_file_path)
         self.cpu_metric = CpuMetrics()
         self.gpu_metric = GpuMetrics()
+        self.memory_metric = MemoryMetrics()
         title_info = (f"{hex(detected_device['vid'])}-{hex(detected_device['pid'])} | "
                       f"{detected_device['width']}x{detected_device['height']}")
 
@@ -50,6 +53,10 @@ class MediaPreviewUI(QMainWindow):
         # Initialize components
         self.text_style = TextStyleConfig()
         self.media_tabs = []
+        
+        # Snap grid settings
+        self.snap_to_grid = False
+        self.grid_size = 10  # pixels
 
         # UI Components will be initialized in setup_ui
         self.preview_label = None
@@ -197,6 +204,26 @@ class MediaPreviewUI(QMainWindow):
             widget.set_enabled(False)
             self.metric_widgets[metric_name] = widget
 
+        # Graph overlay widgets
+        self.cpu_graph_widget = CpuGraphWidget(self.preview_widget, self.cpu_metric)
+        self.cpu_graph_widget.move(10, 100)
+        self.cpu_graph_widget.setVisible(False)
+
+        self.gpu_graph_widget = GpuGraphWidget(self.preview_widget, self.gpu_metric)
+        self.gpu_graph_widget.move(140, 100)
+        self.gpu_graph_widget.setVisible(False)
+
+        self.memory_graph_widget = MemoryGraphWidget(self.preview_widget, self.memory_metric)
+        self.memory_graph_widget.move(270, 100)
+        self.memory_graph_widget.setVisible(False)
+
+        # Dictionary for config generation
+        self.graph_widgets = {
+            'cpu': self.cpu_graph_widget,
+            'gpu': self.gpu_graph_widget,
+            'memory': self.memory_graph_widget
+        }
+
     def apply_style_to_all_widgets(self):
         """Apply current text style to all overlay widgets"""
         for widget in [self.date_widget, self.time_widget] + list(self.metric_widgets.values()):
@@ -290,6 +317,11 @@ class MediaPreviewUI(QMainWindow):
             metrics_config = display_config.get('metrics', {})
             if metrics_config and 'configs' in metrics_config:
                 self.apply_metrics_config(metrics_config['configs'])
+            
+            # Apply graph configurations
+            graphs_config = display_config.get('graphs', {})
+            if graphs_config and graphs_config.get('enabled', False):
+                self.apply_graphs_config(graphs_config['configs'])
 
             # Update controls to reflect current widget states
             self.update_controls_from_widgets()
@@ -399,6 +431,59 @@ class MediaPreviewUI(QMainWindow):
 
         except Exception as e:
             self.logger.error(f"Error applying metrics config: {e}")
+    
+    def apply_graphs_config(self, graphs_configs):
+        """Apply configurations to graph widgets"""
+        try:
+            # First hide all graphs
+            for graph_widget in self.graph_widgets.values():
+                graph_widget.setVisible(False)
+            
+            # Apply configuration for each graph
+            for graph_config in graphs_configs:
+                graph_type = graph_config.get('type')
+                if graph_type not in self.graph_widgets:
+                    continue
+                
+                widget = self.graph_widgets[graph_type]
+                
+                # Apply visibility
+                widget.setVisible(True)
+                
+                # Apply position
+                position = graph_config.get('position', {})
+                if position:
+                    x = position.get('x', widget.pos().x())
+                    y = position.get('y', widget.pos().y())
+                    widget.move(x, y)
+                
+                # Apply size
+                width = graph_config.get('width', 120)
+                height = graph_config.get('height', 60)
+                widget.resize(width, height)
+                widget.graph_width = width
+                widget.graph_height = height
+                
+                # Apply font size
+                font_size = graph_config.get('font_size', 10)
+                widget.font_size = font_size
+                
+                self.logger.debug(f"Loaded graph {graph_type}: pos=({x},{y}), size={width}x{height}, font={font_size}")
+            
+            # Update checkboxes to match visibility
+            if hasattr(self.controls_manager, 'cpu_graph_checkbox'):
+                self.controls_manager.cpu_graph_checkbox.setChecked(self.graph_widgets['cpu'].isVisible())
+            if hasattr(self.controls_manager, 'gpu_graph_checkbox'):
+                self.controls_manager.gpu_graph_checkbox.setChecked(self.graph_widgets['gpu'].isVisible())
+            if hasattr(self.controls_manager, 'memory_graph_checkbox'):
+                self.controls_manager.memory_graph_checkbox.setChecked(self.graph_widgets['memory'].isVisible())
+            
+            # Update font size spinner
+            if hasattr(self.controls_manager, 'graph_font_size_spin') and graphs_configs:
+                self.controls_manager.graph_font_size_spin.setValue(graphs_configs[0].get('font_size', 10))
+        
+        except Exception as e:
+            self.logger.error(f"Error applying graphs config: {e}")
 
     def update_controls_from_widgets(self):
         """Update control interface to reflect current widget states"""
@@ -536,6 +621,38 @@ class MediaPreviewUI(QMainWindow):
         if metric_name in self.metric_widgets:
             self.metric_widgets[metric_name].set_custom_unit(text.strip())
 
+    def on_graph_toggled(self, graph_type, checked):
+        """Handle graph checkbox toggle"""
+        if graph_type == 'cpu' and hasattr(self, 'cpu_graph_widget'):
+            self.cpu_graph_widget.setVisible(checked)
+        elif graph_type == 'gpu' and hasattr(self, 'gpu_graph_widget'):
+            self.gpu_graph_widget.setVisible(checked)
+        elif graph_type == 'memory' and hasattr(self, 'memory_graph_widget'):
+            self.memory_graph_widget.setVisible(checked)
+    
+    def on_graph_font_size_changed(self, size):
+        """Handle graph font size change"""
+        for widget in [self.cpu_graph_widget, self.gpu_graph_widget, self.memory_graph_widget]:
+            if hasattr(self, 'cpu_graph_widget'):
+                widget.font_size = size
+    
+    def on_snap_grid_toggled(self, checked):
+        """Handle snap to grid toggle"""
+        self.snap_to_grid = checked
+        self.logger.debug(f"Snap to grid: {checked}")
+    
+    def on_grid_size_changed(self, size):
+        """Handle grid size change"""
+        self.grid_size = size
+        self.logger.debug(f"Grid size: {size}px")
+    
+    def snap_to_grid_position(self, x, y):
+        """Snap coordinates to grid"""
+        if not self.snap_to_grid:
+            return x, y
+        return (round(x / self.grid_size) * self.grid_size,
+                round(y / self.grid_size) * self.grid_size)
+
     def on_collection_created(self, collection_path):
         """Handle collection creation"""
         self.on_background_clicked(collection_path)
@@ -591,7 +708,7 @@ class MediaPreviewUI(QMainWindow):
         
         config_path = self.config_generator.generate_config_yaml(
             self.preview_manager, self.text_style, self.metric_widgets,
-            self.date_widget, self.time_widget, rotation=rotation
+            self.date_widget, self.time_widget, self.graph_widgets, rotation=rotation
         )
         if config_path:
             # Save theme name to metadata
@@ -610,7 +727,7 @@ class MediaPreviewUI(QMainWindow):
         
         self.config_generator.generate_config_yaml(
             self.preview_manager, self.text_style, self.metric_widgets,
-            self.date_widget, self.time_widget, rotation=rotation, preview=True
+            self.date_widget, self.time_widget, self.graph_widgets, rotation=rotation, preview=True
         )
 
     def closeEvent(self, event):

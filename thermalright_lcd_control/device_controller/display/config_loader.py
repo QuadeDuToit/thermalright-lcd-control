@@ -6,7 +6,7 @@ from typing import Dict, Any, Tuple
 
 import yaml
 
-from .config import DisplayConfig, BackgroundType, MetricConfig, TextConfig
+from .config import DisplayConfig, BackgroundType, MetricConfig, TextConfig, GraphConfig
 from ...common.logging_config import LoggerConfig
 
 
@@ -64,6 +64,20 @@ class ConfigLoader:
             enabled=text_data.get("enabled", True)
         )
 
+    def _parse_graph_config(self, graph_data: Dict[str, Any]) -> GraphConfig:
+        """Parse a graph configuration from YAML data"""
+        return GraphConfig(
+            graph_type=graph_data["type"],
+            position=(
+                graph_data["position"]["x"],
+                graph_data["position"]["y"]
+            ),
+            width=graph_data.get("width", 120),
+            height=graph_data.get("height", 60),
+            color=graph_data.get("color", "#FFFFFF"),
+            font_size=graph_data.get("font_size", 10)
+        )
+
     def load_config(self, config_path: str, width: int, height: int) -> DisplayConfig:
         """Load configuration from YAML file"""
         config_file = Path(config_path)
@@ -90,6 +104,13 @@ class ConfigLoader:
             for metric_data in display_data["metrics"]["configs"]:
                 if metric_data.get("enabled", True):
                     metrics_configs.append(self._parse_metric_config(metric_data))
+        
+        # Parse graph configurations
+        graph_configs = []
+        if display_data.get("graphs", {}).get("enabled", False):
+            for graph_data in display_data["graphs"]["configs"]:
+                graph_configs.append(self._parse_graph_config(graph_data))
+        
         # Parse date configuration
         date_config = None
         if display_data["date"]["enabled"]:
@@ -120,6 +141,7 @@ class ConfigLoader:
             foreground_position=foreground_position,
             foreground_alpha=foreground_alpha,
             metrics_configs=metrics_configs,
+            graph_configs=graph_configs,
             date_config=date_config,
             time_config=time_config
         )

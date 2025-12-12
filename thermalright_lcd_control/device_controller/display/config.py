@@ -41,6 +41,17 @@ class MetricConfig:
 
 
 @dataclass
+class GraphConfig:
+    """Configuration for graph overlay display"""
+    graph_type: str  # 'cpu', 'gpu', 'memory'
+    position: Tuple[int, int] = (0, 0)
+    width: int = 120
+    height: int = 60
+    color: str = "#FFFFFF"
+    font_size: int = 10
+
+
+@dataclass
 class DisplayConfig:
     """Complete display configuration"""
     # Background (required)
@@ -62,6 +73,9 @@ class DisplayConfig:
     # Metrics configuration
     metrics_configs: List[MetricConfig] = None
 
+    # Graph configuration
+    graph_configs: List[GraphConfig] = None
+
     # Date configuration
     date_config: Optional[TextConfig] = None
 
@@ -71,3 +85,5 @@ class DisplayConfig:
     def __post_init__(self):
         if self.metrics_configs is None:
             self.metrics_configs = []
+        if self.graph_configs is None:
+            self.graph_configs = []

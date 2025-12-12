@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw
 from .config import DisplayConfig
 from .frame_manager import FrameManager
 from .text_renderer import TextRenderer
+from .graph_renderer import GraphRenderer
 from .utils import async_background
 from ...common.logging_config import LoggerConfig
 
@@ -23,9 +24,16 @@ class DisplayGenerator:
         # Initialize components
         self.frame_manager = FrameManager(config)
         self.text_renderer = TextRenderer(config)  # Pass config for global font
+        
+        # Initialize graph renderers
+        self.graph_renderers = []
+        for graph_config in config.graph_configs:
+            self.graph_renderers.append(GraphRenderer(graph_config))
 
         self.logger.info(f"DisplayGenerator initialized with background type: {self.config.background_type}")
         self.logger.info(f"Global font: {self.config.global_font_path or 'Default system font'}")
+        if self.graph_renderers:
+            self.logger.info(f"Initialized {len(self.graph_renderers)} graph renderer(s)")
 
     def _add_foreground_image(self, background: Image.Image) -> Image.Image:
         """Add foreground image to background"""
@@ -73,6 +81,12 @@ class DisplayGenerator:
 
         # Draw time (HH:MM format)
         self.text_renderer.render_time(draw, self.config.time_config)
+        
+        # Render and composite graph overlays
+        for graph_renderer in self.graph_renderers:
+            graph_img = graph_renderer.render(metrics)
+            # Composite graph onto result at configured position
+            result.paste(graph_img, graph_renderer.config.position, graph_img)
 
         convert = result.convert('RGB')
 

@@ -50,6 +50,7 @@ class ControlsManager:
         controls_layout.addWidget(self._create_opacity_controls())
         controls_layout.addWidget(self._create_text_style_controls())
         controls_layout.addWidget(self._create_overlay_controls())
+        controls_layout.addWidget(self._create_snap_grid_controls())
         controls_layout.addWidget(self._create_rotation_controls())
         controls_layout.addWidget(self._create_action_controls())
 
@@ -171,7 +172,65 @@ class ControlsManager:
 
         overlay_layout.addLayout(cpu_metrics_layout)
         overlay_layout.addLayout(gpu_metrics_layout)
+        
+        # Graph widgets
+        graphs_layout = QHBoxLayout()
+        graphs_layout.addWidget(QLabel("Live Graphs:"))
+        
+        self.cpu_graph_checkbox = QCheckBox("CPU Graph")
+        self.cpu_graph_checkbox.setChecked(False)
+        self.cpu_graph_checkbox.toggled.connect(lambda checked: self.parent.on_graph_toggled('cpu', checked))
+        graphs_layout.addWidget(self.cpu_graph_checkbox)
+        
+        self.gpu_graph_checkbox = QCheckBox("GPU Graph")
+        self.gpu_graph_checkbox.setChecked(False)
+        self.gpu_graph_checkbox.toggled.connect(lambda checked: self.parent.on_graph_toggled('gpu', checked))
+        graphs_layout.addWidget(self.gpu_graph_checkbox)
+        
+        self.memory_graph_checkbox = QCheckBox("Memory Graph")
+        self.memory_graph_checkbox.setChecked(False)
+        self.memory_graph_checkbox.toggled.connect(lambda checked: self.parent.on_graph_toggled('memory', checked))
+        graphs_layout.addWidget(self.memory_graph_checkbox)
+        
+        graphs_layout.addStretch()
+        overlay_layout.addLayout(graphs_layout)
+        
+        # Graph font size control
+        graph_font_layout = QHBoxLayout()
+        graph_font_layout.addWidget(QLabel("Graph Font Size:"))
+        
+        self.graph_font_size_spin = QSpinBox()
+        self.graph_font_size_spin.setRange(6, 20)
+        self.graph_font_size_spin.setValue(10)
+        self.graph_font_size_spin.valueChanged.connect(self.parent.on_graph_font_size_changed)
+        graph_font_layout.addWidget(self.graph_font_size_spin)
+        graph_font_layout.addStretch()
+        
+        overlay_layout.addLayout(graph_font_layout)
+        
         return overlay_group
+    
+    def _create_snap_grid_controls(self) -> QGroupBox:
+        """Create snap-to-grid controls"""
+        snap_group = QGroupBox("Snap to Grid")
+        snap_layout = QHBoxLayout(snap_group)
+        
+        self.snap_grid_checkbox = QCheckBox("Enable Snap")
+        self.snap_grid_checkbox.setChecked(False)
+        self.snap_grid_checkbox.toggled.connect(lambda checked: self.parent.on_snap_grid_toggled(checked))
+        snap_layout.addWidget(self.snap_grid_checkbox)
+        
+        snap_layout.addWidget(QLabel("Grid Size:"))
+        self.grid_size_spin = QSpinBox()
+        self.grid_size_spin.setRange(5, 50)
+        self.grid_size_spin.setValue(10)
+        self.grid_size_spin.setSuffix("px")
+        self.grid_size_spin.valueChanged.connect(lambda value: self.parent.on_grid_size_changed(value))
+        snap_layout.addWidget(self.grid_size_spin)
+        
+        snap_layout.addStretch()
+        
+        return snap_group
 
     def _create_metric_layout(self, display_name, metric_name):
         metric_layout = QHBoxLayout()

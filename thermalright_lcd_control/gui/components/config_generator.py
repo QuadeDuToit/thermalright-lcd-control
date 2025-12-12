@@ -20,7 +20,7 @@ class ConfigGenerator:
         self.logger = get_gui_logger()
 
     def generate_config_data(self, preview_manager, text_style, metric_widgets,
-                             date_widget, time_widget, rotation=0) -> Optional[dict]:
+                             date_widget, time_widget, graph_widgets=None, rotation=0) -> Optional[dict]:
         """Generate YAML configuration file based on current preview state"""
         try:
             foreground_path = self._add_resolution_placeholder(preview_manager.current_foreground_path,
@@ -41,6 +41,10 @@ class ConfigGenerator:
                     },
                     "metrics": {
                         "enabled": any(widget.enabled for widget in metric_widgets.values()),
+                        "configs": []
+                    },
+                    "graphs": {
+                        "enabled": False,
                         "configs": []
                     },
                     "date": self._create_date_time_config(date_widget, 310, 15, text_style),
@@ -72,6 +76,21 @@ class ConfigGenerator:
                     }
                     config_data["display"]["metrics"]["configs"].append(metric_config)
 
+            # Add graph configurations
+            if graph_widgets:
+                for graph_type, widget in graph_widgets.items():
+                    if widget.isVisible():  # Only visible graphs
+                        graph_config = {
+                            "type": graph_type,
+                            "position": {"x": widget.pos().x(), "y": widget.pos().y()},
+                            "width": widget.graph_width,
+                            "height": widget.graph_height,
+                            "color": widget.graph_color,
+                            "font_size": widget.font_size
+                        }
+                        config_data["display"]["graphs"]["configs"].append(graph_config)
+                        config_data["display"]["graphs"]["enabled"] = True
+
             return config_data
 
         except Exception as e:
@@ -79,7 +98,7 @@ class ConfigGenerator:
             return None
 
     def generate_config_yaml(self, preview_manager, text_style, metric_widgets,
-                             date_widget, time_widget, rotation=0, preview: bool = False) -> Optional[str]:
+                             date_widget, time_widget, graph_widgets=None, rotation=0, preview: bool = False) -> Optional[str]:
         """Generate YAML configuration file based on current preview state"""
         try:
             # Check if rotation changed
@@ -88,7 +107,7 @@ class ConfigGenerator:
             rotation_changed = self._check_rotation_changed(services_config_path, rotation)
             
             config_data = self.generate_config_data(preview_manager, text_style, metric_widgets, date_widget,
-                                                    time_widget, rotation)
+                                                    time_widget, graph_widgets, rotation)
 
             self._save_config_file(services_config_path, config_data)
             

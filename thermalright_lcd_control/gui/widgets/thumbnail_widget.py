@@ -314,24 +314,34 @@ class ThumbnailWidget(QWidget):
     def cleanup_video(self):
         """Clean up video resources"""
         # Stop and cleanup loader thread
-        if self.video_loader and self.video_loader.isRunning():
-            self.video_loader.wait(1000)  # Wait up to 1 second
-            if self.video_loader.isRunning():
-                self.video_loader.terminate()
+        try:
+            if self.video_loader and self.video_loader.isRunning():
+                self.video_loader.wait(1000)  # Wait up to 1 second
+                if self.video_loader.isRunning():
+                    self.video_loader.terminate()
+                self.video_loader = None
+        except RuntimeError:
+            # Object already deleted, ignore
             self.video_loader = None
             
         if self.media_player:
-            self.media_player.stop()
-            if hasattr(self.media_player, 'mediaStatusChanged'):
-                try:
-                    self.media_player.mediaStatusChanged.disconnect()
-                except:
-                    pass
-            self.media_player.setVideoOutput(None)
+            try:
+                self.media_player.stop()
+                if hasattr(self.media_player, 'mediaStatusChanged'):
+                    try:
+                        self.media_player.mediaStatusChanged.disconnect()
+                    except:
+                        pass
+                self.media_player.setVideoOutput(None)
+            except RuntimeError:
+                pass
             self.media_player = None
         if self.audio_output:
             self.audio_output = None
 
     def __del__(self):
         """Cleanup when widget is destroyed"""
-        self.cleanup_video()
+        try:
+            self.cleanup_video()
+        except:
+            pass  # Ignore cleanup errors during destruction
