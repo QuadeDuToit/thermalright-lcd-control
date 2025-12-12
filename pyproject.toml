@@ -18,3 +18,8 @@ dependencies = [
     "pillow>=11.3.0",
     "pyyaml>=6.0.2"
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["thermalright_lcd_control*"]
+exclude = ["resources*"]

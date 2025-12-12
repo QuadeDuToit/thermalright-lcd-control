@@ -338,7 +338,7 @@ class ControlsManager:
     
     def _get_current_rotation(self):
         """Get current rotation from config file"""
-        config_file = os.path.expanduser("~/.config/thermalright-lcd-control/config/config_480480.yaml")
+        config_file = "/usr/share/thermalright-lcd-control/resources/config/config_480480.yaml"
         try:
             with open(config_file, 'r') as f:
                 config = yaml.safe_load(f)
@@ -364,7 +364,7 @@ class ControlsManager:
     
     def _set_rotation(self, degrees):
         """Set rotation in config and restart service"""
-        config_file = os.path.expanduser("~/.config/thermalright-lcd-control/config/config_480480.yaml")
+        config_file = "/usr/share/thermalright-lcd-control/resources/config/config_480480.yaml"
         
         try:
             # Update config file

@@ -1,0 +1,5 @@
+class_name: thermalright_lcd_control.device_controller.display.hid_devices.DisplayDevice04165302
+height: 240
+pid: 21250
+vid: 1046
+width: 320

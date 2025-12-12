@@ -126,17 +126,23 @@ class ConfigGenerator:
 
     def _get_service_config_file_path(self, dev_width, dev_height) -> Optional[Path]:
         try:
-            service_config_dir = self.config.get('paths', {}).get('service_config', './config')
-            service_config_path = f"{service_config_dir}/config_{dev_width}{dev_height}.yaml"
+            # Use system-wide config path
+            service_config_path = f"/usr/share/thermalright-lcd-control/resources/config/config_{dev_width}{dev_height}.yaml"
+            print(f"[DEBUG] service_config_path: {service_config_path}")
             return Path(service_config_path)
         except Exception as e:
             self.logger.error(f"Error updating service config: {e}")
             return None
 
     def _save_config_file(self, config_path: Path, config_data: dict) -> str:
-        with open(config_path, 'w', encoding='utf-8') as f:
-            yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True, indent=2)
-
+        print(f"[DEBUG] Attempting to save config to: {config_path}")
+        try:
+            with open(config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True, indent=2)
+            print(f"[DEBUG] Successfully saved config to: {config_path}")
+        except Exception as e:
+            print(f"[DEBUG] Failed to save config: {e}")
+            raise
         return str(config_path)
 
     def _add_resolution_placeholder(self, path: str, width: int, height: int) -> Optional[str]:

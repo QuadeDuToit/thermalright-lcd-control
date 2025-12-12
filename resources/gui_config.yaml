@@ -2,10 +2,10 @@
 # Copyright © 2025 Rejeb Ben Rejeb
 
 paths:
-  themes_dir: "./resources/themes/presets"
-  backgrounds_dir: "./resources/themes/backgrounds"
-  foregrounds_dir: "./resources/themes/foregrounds"
-  service_config: "./resources/config"
+  themes_dir: "/usr/share/thermalright-lcd-control/resources/themes/presets"
+  backgrounds_dir: "/usr/share/thermalright-lcd-control/resources/themes/backgrounds"
+  foregrounds_dir: "/usr/share/thermalright-lcd-control/resources/themes/foregrounds"
+  service_config: "/usr/share/thermalright-lcd-control/resources/config"
 window:
   default_width: 1920
   default_height: 1080
