@@ -199,7 +199,6 @@ class MediaPreviewUI(QMainWindow):
 
     def on_theme_selected(self, theme_path: str):
         """Handle theme selection"""
-        print(f"[DEBUG] on_theme_selected called with: {theme_path}")
         self.logger.debug(f"on_theme_selected called with: {theme_path}")
         try:
             import yaml
@@ -211,7 +210,6 @@ class MediaPreviewUI(QMainWindow):
                 theme_config = yaml.safe_load(f)
 
             display_config = theme_config.get('display', {})
-            print(f"[DEBUG] Display config keys: {display_config.keys()}")
             self.logger.debug(f"Display config loaded: {display_config.keys()}")
 
             # Load background
@@ -267,17 +265,13 @@ class MediaPreviewUI(QMainWindow):
 
             # Load rotation from theme (AFTER update_controls_from_widgets to override)
             rotation = display_config.get('rotation', 0)
-            print(f"[DEBUG] Loading rotation from theme: {rotation}°")
             if hasattr(self.controls_manager, 'rotation_combo'):
                 rotation_index = {0: 0, 90: 1, 180: 2, 270: 3}.get(rotation, 0)
                 combo = self.controls_manager.rotation_combo
                 combo.blockSignals(True)
                 combo.setCurrentIndex(rotation_index)
                 combo.blockSignals(False)
-                print(f"[DEBUG] Set rotation dropdown to index {rotation_index} ({rotation}°)")
                 self.logger.debug(f"Loaded rotation from theme: {rotation}°")
-            else:
-                print("[DEBUG] rotation_combo not found in controls_manager")
 
             self.logger.debug(f"Theme loaded: {Path(theme_path).name}")
 

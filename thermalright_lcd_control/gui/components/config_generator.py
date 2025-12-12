@@ -23,7 +23,6 @@ class ConfigGenerator:
                              date_widget, time_widget, rotation=0) -> Optional[dict]:
         """Generate YAML configuration file based on current preview state"""
         try:
-            print(f"[DEBUG] Generating config with rotation={rotation}")
             foreground_path = self._add_resolution_placeholder(preview_manager.current_foreground_path,
                                                                preview_manager.preview_width,
                                                                preview_manager.preview_height)
@@ -73,8 +72,6 @@ class ConfigGenerator:
                     }
                     config_data["display"]["metrics"]["configs"].append(metric_config)
 
-            print(f"[DEBUG] config_data has rotation: {'rotation' in config_data.get('display', {})}")
-            print(f"[DEBUG] rotation value: {config_data.get('display', {}).get('rotation', 'NOT FOUND')}")
             return config_data
 
         except Exception as e:
@@ -107,7 +104,6 @@ class ConfigGenerator:
                 config_path = self._get_new_config_file_path(preview_manager.preview_width,
                                                              preview_manager.preview_height)
                 self._save_config_file(config_path, config_data)
-                print(f"Theme saved with rotation={rotation}° to {config_path.name}")
                 return f"{config_path.absolute()}"
 
         except Exception as e:
@@ -143,7 +139,6 @@ class ConfigGenerator:
         try:
             # Use system-wide config path
             service_config_path = f"/usr/share/thermalright-lcd-control/resources/config/config_{dev_width}{dev_height}.yaml"
-            print(f"[DEBUG] service_config_path: {service_config_path}")
             return Path(service_config_path)
         except Exception as e:
             self.logger.error(f"Error updating service config: {e}")
@@ -160,13 +155,11 @@ class ConfigGenerator:
             return False
 
     def _save_config_file(self, config_path: Path, config_data: dict) -> str:
-        print(f"[DEBUG] Attempting to save config to: {config_path}")
         try:
             with open(config_path, 'w', encoding='utf-8') as f:
                 yaml.dump(config_data, f, default_flow_style=False, allow_unicode=True, indent=2)
-            print(f"[DEBUG] Successfully saved config to: {config_path}")
         except Exception as e:
-            print(f"[DEBUG] Failed to save config: {e}")
+            self.logger.error(f"Failed to save config: {e}")
             raise
         return str(config_path)
 
