@@ -378,8 +378,8 @@ class ControlsManager:
             with open(config_file, 'w') as f:
                 yaml.safe_dump(config, f, default_flow_style=False)
             
-            # Restart service (run in background to avoid blocking GUI)
-            subprocess.Popen(['sudo', 'systemctl', 'restart', 'thermalright-lcd-control'], 
+            # Restart service (polkit rule allows passwordless restart)
+            subprocess.Popen(['systemctl', 'restart', 'thermalright-lcd-control'], 
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             print(f"Rotation set to {degrees}°")

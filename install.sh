@@ -87,6 +87,24 @@ cp "$SCRIPT_DIR/pyproject.toml" "$INSTALL_DIR/"
 cp "$SCRIPT_DIR/README.md" "$INSTALL_DIR/" 2>/dev/null || true
 cp "$SCRIPT_DIR/LICENSE" "$INSTALL_DIR/" 2>/dev/null || true
 
+# Make config directory writable by user
+if [ -n "$SUDO_USER" ]; then
+    chown -R "$SUDO_USER:$SUDO_USER" "$INSTALL_DIR/resources/config"
+    chown -R "$SUDO_USER:$SUDO_USER" "$INSTALL_DIR/resources/themes/presets"
+fi
+
+# Install Python dependencies for root (service)
+log_info "Installing Python dependencies for service (root)..."
+pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml --break-system-packages 2>/dev/null || \
+pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml
+
+# Install Python dependencies for the user who invoked sudo (GUI)
+if [ -n "$SUDO_USER" ]; then
+    log_info "Installing Python dependencies for GUI user ($SUDO_USER)..."
+    sudo -u "$SUDO_USER" pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml --break-system-packages 2>/dev/null || \
+    sudo -u "$SUDO_USER" pip3 install PySide6 hid psutil opencv-python pyusb pillow pyyaml
+fi
+
 # Install Python package system-wide
 log_info "Installing Python package..."
 cd "$INSTALL_DIR"
@@ -95,11 +113,11 @@ pip3 install -e . --break-system-packages 2>/dev/null || pip3 install -e .
 # Create wrapper scripts
 log_info "Creating launcher scripts..."
 
-# GUI launcher
+# GUI launcher - runs as user, configs writable by user's group
 cat > "$BIN_DIR/$APP_NAME" <<EOF
 #!/bin/bash
-cd "$INSTALL_DIR"
-exec python3 -m thermalright_lcd_control.main_gui "\$@"
+cd "/usr/share/thermalright-lcd-control"
+exec python3 -m thermalright_lcd_control.main_gui --config "/usr/share/thermalright-lcd-control/resources/gui_config.yaml" "\$@"
 EOF
 chmod 755 "$BIN_DIR/$APP_NAME"
 
@@ -149,6 +167,20 @@ EOF
 
 chown "$ACTUAL_UID:$ACTUAL_GID" "$DESKTOP_DIR/$APP_NAME.desktop"
 chmod 644 "$DESKTOP_DIR/$APP_NAME.desktop"
+
+# Create polkit rule to allow service restart without password
+log_info "Creating polkit rule for passwordless service restart..."
+cat > "/etc/polkit-1/rules.d/50-thermalright-lcd-control.rules" <<EOF
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "thermalright-lcd-control.service" &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});
+EOF
+
+chmod 644 "/etc/polkit-1/rules.d/50-thermalright-lcd-control.rules"
 
 # Initialize device
 log_info "Initializing device..."
