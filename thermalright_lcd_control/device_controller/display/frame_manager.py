@@ -43,7 +43,9 @@ class FrameManager:
         self.metrics_thread = None
         self.metrics_running = False
         self.metrics_lock = threading.Lock()
-        if len(config.metrics_configs) != 0:
+        
+        # Initialize metrics if either metrics or graphs are configured
+        if len(config.metrics_configs) != 0 or len(config.graph_configs) != 0:
             # Initialize metrics collectors
             self.cpu_metrics = CpuMetrics()
             self.gpu_metrics = GpuMetrics()
