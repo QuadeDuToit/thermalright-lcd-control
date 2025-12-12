@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright © 2025 Rejeb Ben Rejeb
 
-"""
-Tab widget for displaying media files with thumbnails
-"""
+"""Tab widget for displaying media files with thumbnails"""
+
+import shutil
+import subprocess
+import uuid
+from pathlib import Path
+from typing import Optional
 
 import shutil
 import uuid
@@ -165,7 +169,18 @@ class MediaTab(QWidget):
             # Create unique collection name
             collection_name = f"collection_{uuid.uuid4().hex[:8]}"
             collection_dir = Path(self.media_dir) / collection_name
-            collection_dir.mkdir(exist_ok=True)
+            
+            # Check if we need elevated permissions
+            needs_root = self._requires_root_permission(collection_dir)
+            
+            if needs_root:
+                # Create directory with pkexec
+                mkdir_cmd = ['pkexec', 'mkdir', '-p', str(collection_dir)]
+                result = subprocess.run(mkdir_cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    raise Exception(f"Failed to create collection directory: {result.stderr}")
+            else:
+                collection_dir.mkdir(exist_ok=True)
 
             # Copy each file to collection directory
             copied_files = []
@@ -173,7 +188,15 @@ class MediaTab(QWidget):
                 source_path = Path(file_path)
                 dest_path = self.get_unique_filename(collection_dir, source_path.name)
 
-                shutil.copy2(source_path, dest_path)
+                if needs_root:
+                    # Copy with pkexec
+                    copy_cmd = ['pkexec', 'cp', str(source_path), str(dest_path)]
+                    result = subprocess.run(copy_cmd, capture_output=True, text=True)
+                    if result.returncode != 0:
+                        raise Exception(f"Failed to copy {source_path.name}: {result.stderr}")
+                else:
+                    shutil.copy2(source_path, dest_path)
+                    
                 copied_files.append(dest_path)
                 self.logger.info(f"Copied {source_path} to {dest_path}")
 
@@ -287,16 +310,22 @@ class MediaTab(QWidget):
         """Copy media file to the appropriate directory"""
         try:
             source_file = Path(source_path)
-
-            # Create destination directory if it doesn't exist
             dest_dir = Path(self.media_dir)
-            dest_dir.mkdir(parents=True, exist_ok=True)
 
             # Get unique filename with user prefix
             dest_path = self.get_unique_filename(dest_dir, source_file.name)
 
-            # Copy the file
-            shutil.copy2(source_path, dest_path)
+            # Check if destination requires root permissions
+            if self._requires_root_permission(dest_dir):
+                # Use pkexec to copy with elevated permissions
+                success = self._copy_with_pkexec(source_path, dest_path)
+                if not success:
+                    return
+            else:
+                # Create destination directory if it doesn't exist
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                # Copy the file normally
+                shutil.copy2(source_path, dest_path)
 
             # Show success message
             QMessageBox.information(
@@ -320,6 +349,66 @@ class MediaTab(QWidget):
                 "Copy Error",
                 f"Unable to copy file:\n{str(e)}"
             )
+
+    def _requires_root_permission(self, path: Path) -> bool:
+        """Check if path requires root permissions"""
+        # Check if path starts with /usr or other system directories
+        path_str = str(path.resolve())
+        return path_str.startswith('/usr/') or path_str.startswith('/opt/') or path_str.startswith('/etc/')
+
+    def _copy_with_pkexec(self, source_path, dest_path) -> bool:
+        """Copy file using pkexec for elevated permissions"""
+        try:
+            dest_dir = dest_path.parent
+            
+            # Create directory first if needed
+            mkdir_cmd = ['pkexec', 'mkdir', '-p', str(dest_dir)]
+            result = subprocess.run(mkdir_cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                if 'dismissed' in result.stderr.lower() or 'cancelled' in result.stderr.lower():
+                    QMessageBox.information(
+                        self,
+                        "Operation Cancelled",
+                        "File copy was cancelled."
+                    )
+                else:
+                    QMessageBox.critical(
+                        self,
+                        "Permission Error",
+                        f"Failed to create directory:\n{result.stderr}"
+                    )
+                return False
+            
+            # Copy the file
+            copy_cmd = ['pkexec', 'cp', str(source_path), str(dest_path)]
+            result = subprocess.run(copy_cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                if 'dismissed' in result.stderr.lower() or 'cancelled' in result.stderr.lower():
+                    QMessageBox.information(
+                        self,
+                        "Operation Cancelled",
+                        "File copy was cancelled."
+                    )
+                else:
+                    QMessageBox.critical(
+                        self,
+                        "Permission Error",
+                        f"Failed to copy file:\n{result.stderr}"
+                    )
+                return False
+            
+            self.logger.info(f"Successfully copied {source_path} to {dest_path} using pkexec")
+            return True
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Copy Error",
+                f"Error during privileged copy:\n{str(e)}"
+            )
+            return False
 
     def auto_apply_new_media(self, file_path):
         """Automatically apply the newly added media"""

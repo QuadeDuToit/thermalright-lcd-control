@@ -168,14 +168,30 @@ EOF
 chown "$ACTUAL_UID:$ACTUAL_GID" "$DESKTOP_DIR/$APP_NAME.desktop"
 chmod 644 "$DESKTOP_DIR/$APP_NAME.desktop"
 
-# Create polkit rule to allow service restart without password
-log_info "Creating polkit rule for passwordless service restart..."
+# Create polkit rules for passwordless operations
+log_info "Creating polkit rules for passwordless operations..."
 cat > "/etc/polkit-1/rules.d/50-thermalright-lcd-control.rules" <<EOF
+// Allow wheel group to restart thermalright-lcd-control service without password
 polkit.addRule(function(action, subject) {
     if (action.id == "org.freedesktop.systemd1.manage-units" &&
         action.lookup("unit") == "thermalright-lcd-control.service" &&
         subject.isInGroup("wheel")) {
         return polkit.Result.YES;
+    }
+});
+
+// Allow wheel group to copy/create files in /usr/share/thermalright-lcd-control without password
+polkit.addRule(function(action, subject) {
+    if ((action.id == "org.freedesktop.policykit.exec") &&
+        subject.isInGroup("wheel")) {
+        var program = action.lookup("program");
+        var cmdline = action.lookup("command_line");
+        
+        // Allow cp and mkdir commands for thermalright-lcd-control directories
+        if ((program == "/usr/bin/cp" || program == "/usr/bin/mkdir") &&
+            cmdline && cmdline.indexOf("/usr/share/thermalright-lcd-control") !== -1) {
+            return polkit.Result.YES;
+        }
     }
 });
 EOF

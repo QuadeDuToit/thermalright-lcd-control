@@ -4,7 +4,7 @@
 """Main window for Media Preview application"""
 
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout
-from PySide6.QtWidgets import (QTabWidget, QFrame, QColorDialog, QMessageBox)
+from PySide6.QtWidgets import (QTabWidget, QFrame, QColorDialog, QMessageBox, QProgressBar)
 from PySide6.QtGui import QPalette, QColor
 
 from .components.config_generator import ConfigGenerator
@@ -135,8 +135,33 @@ class MediaPreviewUI(QMainWindow):
             "QLabel { background-color: white; color: #333; border: none; font-size: 12px; }")
         self.preview_label.setText("Initializing preview...")
 
+        # Progress bar for video loading
+        self.preview_progress = QProgressBar(self.preview_widget)
+        progress_width = min(300, preview_width - 40)
+        progress_x = (preview_width - progress_width) // 2
+        progress_y = preview_height - 40
+        self.preview_progress.setGeometry(progress_x, progress_y, progress_width, 20)
+        self.preview_progress.setVisible(False)
+        self.preview_progress.setTextVisible(True)
+        self.preview_progress.setFormat("Loading video: %p%")
+        self.preview_progress.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #4CAF50;
+                border-radius: 5px;
+                text-align: center;
+                background-color: white;
+                color: #333;
+                font-weight: bold;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 3px;
+            }
+        """)
+
         # Initialize preview manager with actual components
-        self.preview_manager = PreviewManager(self.config, self.preview_label, self.text_style)
+        self.preview_manager = PreviewManager(self.config, self.preview_label, self.text_style, 
+                                             self.preview_progress, self._raise_overlay_widgets)
         self.preview_manager.set_device_dimensions(preview_width, preview_height)
 
         center_layout.addWidget(preview_frame)
@@ -589,20 +614,35 @@ class MediaPreviewUI(QMainWindow):
         )
 
     def closeEvent(self, event):
-        """Cleanup on close"""
-        # Stop overlay widget timers
-        for widget in [self.date_widget, self.time_widget]:
-            if widget and hasattr(widget, 'update_timer'):
-                widget.update_timer.stop()
-
-        if self.preview_manager:
-            self.preview_manager.cleanup()
-
+        """Handle window close"""
+        self.preview_manager.cleanup()
         for tab in self.media_tabs:
             if hasattr(tab, 'cleanup_thumbnails'):
                 tab.cleanup_thumbnails()
-
         super().closeEvent(event)
+
+    def _raise_overlay_widgets(self):
+        """Raise all overlay widgets to keep them on top"""
+        # Raise all draggable overlay widgets
+        if hasattr(self, 'date_widget'):
+            self.date_widget.raise_()
+        if hasattr(self, 'time_widget'):
+            self.time_widget.raise_()
+        if hasattr(self, 'cpu_temp_widget'):
+            self.cpu_temp_widget.raise_()
+        if hasattr(self, 'cpu_usage_widget'):
+            self.cpu_usage_widget.raise_()
+        if hasattr(self, 'cpu_freq_widget'):
+            self.cpu_freq_widget.raise_()
+        if hasattr(self, 'gpu_temp_widget'):
+            self.gpu_temp_widget.raise_()
+        if hasattr(self, 'gpu_usage_widget'):
+            self.gpu_usage_widget.raise_()
+        if hasattr(self, 'gpu_freq_widget'):
+            self.gpu_freq_widget.raise_()
+        # Raise progress bar
+        if hasattr(self, 'preview_progress'):
+            self.preview_progress.raise_()
     
     def _detect_dark_theme(self) -> bool:
         """Detect if the OS is using a dark theme"""

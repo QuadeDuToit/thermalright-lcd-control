@@ -5,21 +5,88 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, QThread, Signal
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtWidgets import QLabel
 
 from ...device_controller.display.config import DisplayConfig, BackgroundType
 from ...device_controller.display.generator import DisplayGenerator
+from .video_preview_player import VideoPreviewPlayer
+
+
+class DisplayGeneratorLoader(QThread):
+    """Thread for loading DisplayGenerator asynchronously"""
+    generator_ready = Signal(object)  # DisplayGenerator object
+    generator_failed = Signal(str)  # Error message
+    progress_updated = Signal(str)  # Progress message
+    progress_percentage = Signal(int)  # Progress percentage 0-100
+
+    def __init__(self, display_config):
+        super().__init__()
+        self.display_config = display_config
+        self.current_progress = 10
+        self.is_loading = True
+
+    def run(self):
+        """Load DisplayGenerator in background thread"""
+        try:
+            self.progress_updated.emit("Initializing video loader...")
+            self.progress_percentage.emit(10)
+            
+            # Start progress simulation
+            from PySide6.QtCore import QTimer
+            import time
+            
+            self.progress_updated.emit("Loading video frames...")
+            
+            # Simulate progress while loading
+            start_time = time.time()
+            self.progress_percentage.emit(20)
+            
+            # Load in a way that allows us to check progress
+            # This runs in thread, so DisplayGenerator blocks here
+            import threading
+            result = {'generator': None, 'error': None}
+            
+            def load():
+                try:
+                    result['generator'] = DisplayGenerator(self.display_config)
+                except Exception as e:
+                    result['error'] = str(e)
+            
+            load_thread = threading.Thread(target=load)
+            load_thread.start()
+            
+            # Update progress while waiting
+            progress = 30
+            while load_thread.is_alive():
+                load_thread.join(0.5)  # Wait 500ms
+                if progress < 90:
+                    progress += 10
+                    elapsed = time.time() - start_time
+                    self.progress_percentage.emit(progress)
+                    self.progress_updated.emit(f"Loading video... ({elapsed:.1f}s)")
+            
+            if result['error']:
+                self.generator_failed.emit(result['error'])
+            else:
+                self.progress_percentage.emit(100)
+                self.progress_updated.emit("Complete!")
+                self.generator_ready.emit(result['generator'])
+                
+        except Exception as e:
+            self.generator_failed.emit(str(e))
 
 
 class PreviewManager:
     """Manages display generation and frame updates for preview"""
 
-    def __init__(self, config, preview_label: QLabel, text_style):
+    def __init__(self, config, preview_label: QLabel, text_style, progress_bar=None, overlay_raise_callback=None):
         self.config = config
         self.preview_label = preview_label
         self.text_style = text_style
+        self.progress_bar = progress_bar
+        self.overlay_raise_callback = overlay_raise_callback
 
         # Display properties
         self.preview_width = 320
@@ -30,6 +97,8 @@ class PreviewManager:
 
         # Components
         self.display_generator = None
+        self.generator_loader = None  # Track loader thread
+        self.video_player = None  # Fast video preview player
         self.preview_timer = QTimer()
         self.preview_timer.timeout.connect(self.update_preview_frame)
 
@@ -83,10 +152,17 @@ class PreviewManager:
         if not self.current_background_path:
             return
 
+        # Stop any existing loader
+        if self.generator_loader and self.generator_loader.isRunning():
+            self.generator_loader.wait(1000)
+            self.generator_loader = None
+
         try:
+            background_type = self.determine_background_type(self.current_background_path)
+            
             display_config = DisplayConfig(
                 background_path=self.current_background_path,
-                background_type=self.determine_background_type(self.current_background_path),
+                background_type=background_type,
                 output_width=self.preview_width,
                 output_height=self.preview_height,
                 global_font_path=self.text_style.font_family,
@@ -95,11 +171,59 @@ class PreviewManager:
                 foreground_alpha=self.foreground_opacity
             )
 
-            if self.display_generator:
-                self.display_generator.cleanup()
-
-            self.display_generator = DisplayGenerator(display_config)
-            self.update_preview_frame()
+            # Check if it's a video - if so, use fast preview player
+            if background_type == BackgroundType.VIDEO:
+                # Stop any existing video player
+                if self.video_player:
+                    self.video_player.cleanup()
+                    self.video_player = None
+                
+                # Stop display generator mode
+                if self.display_generator:
+                    self.display_generator.cleanup()
+                    self.display_generator = None
+                self.preview_timer.stop()
+                
+                # Show loading briefly
+                self.preview_label.setText("⏳\nLoading video preview...")
+                if self.progress_bar:
+                    self.progress_bar.setValue(0)
+                    self.progress_bar.setVisible(True)
+                
+                # Create fast video preview player
+                self.video_player = VideoPreviewPlayer(
+                    self.current_background_path,
+                    self.preview_width,
+                    self.preview_height,
+                    foreground_path=self.current_foreground_path,
+                    foreground_opacity=self.foreground_opacity
+                )
+                
+                # Connect signals
+                self.video_player.first_frame_ready.connect(self.on_video_first_frame)
+                self.video_player.frame_ready.connect(self.on_video_frame)
+                self.video_player.error_occurred.connect(self.on_video_error)
+                
+                # Initialize and play
+                if self.video_player.initialize():
+                    self.video_player.play()
+                    if self.progress_bar:
+                        self.progress_bar.setVisible(False)
+                
+            else:
+                # For images/gifs, load synchronously (fast enough)
+                # Stop and cleanup video player if it was running
+                if self.video_player:
+                    self.video_player.cleanup()
+                    self.video_player = None
+                
+                # Clean up existing generator
+                if self.display_generator:
+                    self.display_generator.cleanup()
+                    
+                self.display_generator = DisplayGenerator(display_config)
+                self.update_preview_frame()
+                
         except Exception as e:
             self.preview_label.setText(f"Error creating\nDisplayGenerator:\n{str(e)}")
 
@@ -135,6 +259,84 @@ class PreviewManager:
         except Exception:
             return None
 
+    def show_loading_indicator(self, message: str):
+        """Show loading indicator in preview"""
+        self.preview_label.setText(f"⏳\n{message}")
+        self.preview_label.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 12px;
+                background-color: #f0f0f0;
+            }
+        """)
+        if self.progress_bar:
+            self.progress_bar.setValue(0)
+            self.progress_bar.setVisible(True)
+
+    def on_generator_ready(self, display_generator):
+        """Handle successful generator creation"""
+        self.display_generator = display_generator
+        self.preview_label.setStyleSheet("")  # Reset stylesheet
+        if self.progress_bar:
+            self.progress_bar.setVisible(False)
+        self.update_preview_frame()
+
+    def on_generator_failed(self, error_msg):
+        """Handle generator creation failure"""
+        self.preview_label.setText(f"Error creating\nDisplayGenerator:\n{error_msg}")
+        self.preview_label.setStyleSheet("""
+            QLabel {
+                color: red;
+                font-size: 11px;
+            }
+        """)
+        if self.progress_bar:
+            self.progress_bar.setVisible(False)
+
+    def on_generator_progress(self, message):
+        """Update loading progress message"""
+        self.preview_label.setText(f"⏳\n{message}")
+
+    def on_generator_progress_percentage(self, percentage):
+        """Update progress bar percentage"""
+        if self.progress_bar:
+            self.progress_bar.setValue(percentage)
+
+    def on_generator_loader_finished(self):
+        """Cleanup when loader thread finishes"""
+        if self.generator_loader:
+            self.generator_loader.deleteLater()
+            self.generator_loader = None
+
+    def on_video_first_frame(self, pixmap):
+        """Handle first frame from fast video player"""
+        self.preview_label.setPixmap(pixmap)
+        self.preview_label.setStyleSheet("")  # Reset stylesheet
+        if self.progress_bar:
+            self.progress_bar.setVisible(False)
+        # Ensure overlay widgets stay on top
+        if self.overlay_raise_callback:
+            self.overlay_raise_callback()
+
+    def on_video_frame(self, pixmap):
+        """Handle subsequent frames from fast video player"""
+        self.preview_label.setPixmap(pixmap)
+        # Ensure overlay widgets stay on top
+        if self.overlay_raise_callback:
+            self.overlay_raise_callback()
+
+    def on_video_error(self, error_msg):
+        """Handle video player error"""
+        self.preview_label.setText(f"Video Error:\n{error_msg}")
+        self.preview_label.setStyleSheet("""
+            QLabel {
+                color: red;
+                font-size: 11px;
+            }
+        """)
+        if self.progress_bar:
+            self.progress_bar.setVisible(False)
+
     def set_background(self, file_path: str):
         """Set background media"""
         self.current_background_path = file_path
@@ -169,5 +371,18 @@ class PreviewManager:
     def cleanup(self):
         """Cleanup resources"""
         self.preview_timer.stop()
+        
+        # Stop and cleanup video player
+        if self.video_player:
+            self.video_player.cleanup()
+            self.video_player = None
+        
+        # Stop and cleanup loader thread
+        if self.generator_loader and self.generator_loader.isRunning():
+            self.generator_loader.wait(1000)
+            if self.generator_loader.isRunning():
+                self.generator_loader.terminate()
+            self.generator_loader = None
+            
         if self.display_generator:
             self.display_generator.cleanup()
