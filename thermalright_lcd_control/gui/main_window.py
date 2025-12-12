@@ -5,6 +5,7 @@
 
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout
 from PySide6.QtWidgets import (QTabWidget, QFrame, QColorDialog, QMessageBox)
+from PySide6.QtGui import QPalette, QColor
 
 from .components.config_generator import ConfigGenerator
 from .components.controls_manager import ControlsManager
@@ -23,6 +24,11 @@ class MediaPreviewUI(QMainWindow):
     def __init__(self, config_file_path=None, detected_device: dict = None):
         super().__init__()
         self.logger = get_gui_logger()
+        
+        # Detect dark theme
+        self.is_dark_theme = self._detect_dark_theme()
+        if self.is_dark_theme:
+            self._apply_dark_theme_fixes()
         # Initialize configuration and device
         self.config = load_config(config_file_path)
         self.cpu_metric = CpuMetrics()
@@ -540,6 +546,18 @@ class MediaPreviewUI(QMainWindow):
 
     def generate_config_yaml(self):
         """Generate YAML configuration file"""
+        from PySide6.QtWidgets import QInputDialog
+        
+        # Prompt for theme name
+        theme_name, ok = QInputDialog.getText(
+            self, "Save Theme",
+            "Enter theme name:",
+            text="My Theme"
+        )
+        
+        if not ok or not theme_name:
+            return  # User cancelled
+        
         # Get current rotation from dropdown (not from file)
         rotation = 0
         if hasattr(self.controls_manager, 'rotation_combo'):
@@ -551,6 +569,10 @@ class MediaPreviewUI(QMainWindow):
             self.date_widget, self.time_widget, rotation=rotation
         )
         if config_path:
+            # Save theme name to metadata
+            from pathlib import Path
+            config_filename = Path(config_path).name
+            self.themes_tab.theme_metadata.set_name(config_filename, theme_name)
             self.themes_tab.refresh_themes()
 
     def generate_preview(self):
@@ -581,3 +603,30 @@ class MediaPreviewUI(QMainWindow):
                 tab.cleanup_thumbnails()
 
         super().closeEvent(event)
+    
+    def _detect_dark_theme(self) -> bool:
+        """Detect if the OS is using a dark theme"""
+        from PySide6.QtWidgets import QApplication
+        palette = QApplication.palette()
+        # Check if window background is darker than window text
+        bg_color = palette.color(QPalette.Window)
+        text_color = palette.color(QPalette.WindowText)
+        # Calculate luminance
+        bg_luminance = (0.299 * bg_color.red() + 0.587 * bg_color.green() + 0.114 * bg_color.blue())
+        text_luminance = (0.299 * text_color.red() + 0.587 * text_color.green() + 0.114 * text_color.blue())
+        return bg_luminance < text_luminance
+    
+    def _apply_dark_theme_fixes(self):
+        """Apply fixes for dark theme (light text on dark backgrounds)"""
+        # Set stylesheet for labels and other text elements with pure white color
+        self.setStyleSheet(self.styleSheet() + """
+            QLabel {
+                color: #FFFFFF;
+            }
+            QGroupBox {
+                color: #FFFFFF;
+            }
+            QCheckBox {
+                color: #FFFFFF;
+            }
+        """)

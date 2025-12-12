@@ -91,7 +91,7 @@ class ThumbnailWidget(QWidget):
                 background-color: transparent;
                 border: none;
                 font-size: 10px;
-                color: #333;
+                color: #FFFFFF;
             }
         """)
 
