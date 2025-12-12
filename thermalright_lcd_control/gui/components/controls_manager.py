@@ -334,6 +334,11 @@ class ControlsManager:
         """)
         rotation_layout.addWidget(flip_btn)
         
+        # Load current rotation and set combo box
+        current_rotation = self._get_current_rotation()
+        rotation_index = {0: 0, 90: 1, 180: 2, 270: 3}.get(current_rotation, 0)
+        self.rotation_combo.setCurrentIndex(rotation_index)
+        
         return rotation_group
     
     def _get_current_rotation(self):
@@ -347,20 +352,20 @@ class ControlsManager:
             return 0
     
     def _on_rotation_changed(self, index):
-        """Handle rotation combo box changes"""
+        """Handle rotation combo box changes (no auto-restart)"""
         rotations = [0, 90, 180, 270]
         new_rotation = rotations[index]
-        self._set_rotation(new_rotation)
+        print(f"Rotation changed to {new_rotation}° (will apply on Save/Apply button)")
     
     def _on_quick_flip(self):
-        """Handle quick flip button"""
+        """Handle quick flip button (no auto-restart)"""
         current = self._get_current_rotation()
         new_rotation = 180 if current == 0 else 0
-        self._set_rotation(new_rotation)
         
         # Update combo box
         rotation_index = {0: 0, 90: 1, 180: 2, 270: 3}.get(new_rotation, 0)
         self.rotation_combo.setCurrentIndex(rotation_index)
+        print(f"Quick flip to {new_rotation}° (will apply on Save/Apply button)")
     
     def _set_rotation(self, degrees):
         """Set rotation in config and restart service"""
@@ -386,3 +391,13 @@ class ControlsManager:
             
         except Exception as e:
             print(f"Error setting rotation: {e}")
+
+    def refresh_rotation_display(self):
+        """Refresh the rotation dropdown to show current config value"""
+        if self.rotation_combo:
+            current_rotation = self._get_current_rotation()
+            rotation_index = {0: 0, 90: 1, 180: 2, 270: 3}.get(current_rotation, 0)
+            # Block signals to prevent triggering on_rotation_changed
+            self.rotation_combo.blockSignals(True)
+            self.rotation_combo.setCurrentIndex(rotation_index)
+            self.rotation_combo.blockSignals(False)

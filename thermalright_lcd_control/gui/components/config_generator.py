@@ -20,14 +20,16 @@ class ConfigGenerator:
         self.logger = get_gui_logger()
 
     def generate_config_data(self, preview_manager, text_style, metric_widgets,
-                             date_widget, time_widget) -> Optional[dict]:
+                             date_widget, time_widget, rotation=0) -> Optional[dict]:
         """Generate YAML configuration file based on current preview state"""
         try:
+            print(f"[DEBUG] Generating config with rotation={rotation}")
             foreground_path = self._add_resolution_placeholder(preview_manager.current_foreground_path,
                                                                preview_manager.preview_width,
                                                                preview_manager.preview_height)
             config_data = {
                 "display": {
+                    "rotation": rotation,
                     "background": {
                         "path": preview_manager.current_background_path or "",
                         "type": preview_manager.determine_background_type(preview_manager.current_background_path).value
@@ -71,6 +73,8 @@ class ConfigGenerator:
                     }
                     config_data["display"]["metrics"]["configs"].append(metric_config)
 
+            print(f"[DEBUG] config_data has rotation: {'rotation' in config_data.get('display', {})}")
+            print(f"[DEBUG] rotation value: {config_data.get('display', {}).get('rotation', 'NOT FOUND')}")
             return config_data
 
         except Exception as e:
@@ -78,21 +82,32 @@ class ConfigGenerator:
             return None
 
     def generate_config_yaml(self, preview_manager, text_style, metric_widgets,
-                             date_widget, time_widget, preview: bool = False) -> Optional[str]:
+                             date_widget, time_widget, rotation=0, preview: bool = False) -> Optional[str]:
         """Generate YAML configuration file based on current preview state"""
         try:
-            config_data = self.generate_config_data(preview_manager, text_style, metric_widgets, date_widget,
-                                                    time_widget)
-
+            # Check if rotation changed
             services_config_path = self._get_service_config_file_path(preview_manager.preview_width,
                                                                       preview_manager.preview_height)
+            rotation_changed = self._check_rotation_changed(services_config_path, rotation)
+            
+            config_data = self.generate_config_data(preview_manager, text_style, metric_widgets, date_widget,
+                                                    time_widget, rotation)
+
             self._save_config_file(services_config_path, config_data)
+            
+            # Restart service if rotation changed (only on Apply)
+            if preview and rotation_changed:
+                import subprocess
+                subprocess.Popen(['systemctl', 'restart', 'thermalright-lcd-control'], 
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"Service restarted due to rotation change to {rotation}°")
 
             if not preview:
                 # Save configuration
                 config_path = self._get_new_config_file_path(preview_manager.preview_width,
                                                              preview_manager.preview_height)
                 self._save_config_file(config_path, config_data)
+                print(f"Theme saved with rotation={rotation}° to {config_path.name}")
                 return f"{config_path.absolute()}"
 
         except Exception as e:
@@ -133,6 +148,16 @@ class ConfigGenerator:
         except Exception as e:
             self.logger.error(f"Error updating service config: {e}")
             return None
+
+    def _check_rotation_changed(self, config_path: Path, new_rotation: int) -> bool:
+        """Check if rotation value has changed in config"""
+        try:
+            with open(config_path, 'r') as f:
+                current_config = yaml.safe_load(f)
+            current_rotation = current_config.get('display', {}).get('rotation', 0)
+            return current_rotation != new_rotation
+        except:
+            return False
 
     def _save_config_file(self, config_path: Path, config_data: dict) -> str:
         print(f"[DEBUG] Attempting to save config to: {config_path}")
