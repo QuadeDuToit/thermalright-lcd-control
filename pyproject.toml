@@ -24,3 +24,8 @@ dependencies = [
 where = ["."]
 include = ["thermalright_lcd_control*"]
 exclude = ["resources*"]
+
+[project.scripts]
+thermalright-lcd-control = "thermalright_lcd_control.main_gui:main"
+thermalright-lcd-service = "thermalright_lcd_control.service:main"
+thermalright-lcd-trigger = "thermalright_lcd_control.trigger_animation:main"

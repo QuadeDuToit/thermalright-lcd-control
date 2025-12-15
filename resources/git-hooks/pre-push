@@ -1,0 +1,11 @@
+#!/bin/sh
+# Git hook: pre-push (triggers before 'git push')
+# Place this file in .git/hooks/pre-push and make it executable
+
+# Path to your animation file
+ANIMATION="/usr/share/thermalright-lcd-control/animations/git-push.mp4"
+
+# Trigger the animation (if file exists)
+if [ -f "$ANIMATION" ]; then
+    thermalright-lcd-trigger --play-animation "$ANIMATION" &
+fi

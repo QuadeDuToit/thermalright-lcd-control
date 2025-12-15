@@ -186,7 +186,22 @@ class DisplayDevice87AD70DB320(UsbDevice):
     # --- run: bulk framing (no HID report-id, no generic chunker) ---
     def run(self):
         self.logger.info("Display device (87AD:70DB) running (bulk mode)")
+        
+        # Initialize animation trigger system
+        if self.animation_trigger is None:
+            from ..animation_trigger import AnimationTrigger
+            self.animation_trigger = AnimationTrigger()
+            self.animation_trigger.start_monitoring()
+            self.logger.info("Animation trigger system initialized")
+        
         while True:
+            # Check for triggered animations
+            if self.animation_trigger.has_pending_animation():
+                animation_path = self.animation_trigger.get_next_animation()
+                if animation_path:
+                    self.logger.info(f"Playing triggered animation: {animation_path}")
+                    self._play_animation(animation_path)
+            
             img, delay_time = self._get_generator().get_frame_with_duration()
 
             # Apply rotation if configured
@@ -320,8 +335,22 @@ class DisplayDevice87AD70DB480(UsbDevice):
     def run(self):
         """Main display loop - send JPEG frames to device"""
         self.logger.info("Display device (87AD:70DB-480) running (JPEG mode)")
+        
+        # Initialize animation trigger system
+        if self.animation_trigger is None:
+            from ..animation_trigger import AnimationTrigger
+            self.animation_trigger = AnimationTrigger()
+            self.animation_trigger.start_monitoring()
+            self.logger.info("Animation trigger system initialized")
 
         while True:
+            # Check for triggered animations
+            if self.animation_trigger.has_pending_animation():
+                animation_path = self.animation_trigger.get_next_animation()
+                if animation_path:
+                    self.logger.info(f"Playing triggered animation: {animation_path}")
+                    self._play_animation(animation_path)
+            
             img, delay_time = self._get_generator().get_frame_with_duration()
 
             # Apply rotation if configured
@@ -351,6 +380,64 @@ class DisplayDevice87AD70DB480(UsbDevice):
                 pass  # Some devices may not need ZLP
 
             time.sleep(delay_time)
+    
+    def _play_animation(self, animation_path):
+        """Play a one-time animation from a file using JPEG protocol"""
+        try:
+            import cv2
+            
+            # Open video file
+            cap = cv2.VideoCapture(animation_path)
+            if not cap.isOpened():
+                self.logger.error(f"Failed to open animation: {animation_path}")
+                return
+            
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            frame_delay = 1.0 / fps
+            
+            self.logger.info(f"Playing animation at {fps} FPS")
+            
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Convert BGR to RGB
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(frame_rgb)
+                
+                # Resize to display dimensions
+                img = img.resize((self.width, self.height), Image.Resampling.LANCZOS)
+                
+                # Apply rotation
+                rotation = getattr(self, 'rotation', 0)
+                if rotation == 180:
+                    img = img.rotate(180, expand=False)
+                elif rotation % 360 != 0:
+                    img = img.rotate(rotation, expand=False)
+                
+                # Encode and send using JPEG protocol
+                jpeg_payload = self._encode_image(img)
+                header = self._make_header(cmd=2, payload_len=len(jpeg_payload))
+                
+                try:
+                    self.dev.write(self.ep_out, header, timeout=2000)
+                    self.send_packet(jpeg_payload)
+                    try:
+                        self._zlp()
+                    except Exception:
+                        pass
+                except Exception as e:
+                    self.logger.warning(f"Frame write error during animation: {e}")
+                    break
+                
+                time.sleep(frame_delay)
+            
+            cap.release()
+            self.logger.info(f"Animation finished: {animation_path}")
+        
+        except Exception as e:
+            self.logger.error(f"Error playing animation: {e}")
 
     def end_stream(self):
         """Send end-of-stream marker"""

@@ -10,6 +10,7 @@ import yaml
 
 from .config_loader import ConfigLoader
 from .generator import DisplayGenerator
+from ..animation_trigger import AnimationTrigger
 from ...common.logging_config import LoggerConfig
 
 
@@ -40,6 +41,10 @@ class DisplayDevice(ABC):
         except Exception as e:
             self.rotation = 0
             self.logger.warning(f"Could not read rotation config: {e}, using 0 degrees")
+        
+        # Initialize animation trigger system (lazy initialization)
+        self.animation_trigger = None
+        
         self._build_generator()
         self.logger.debug(f"DisplayDevice initialized with header: {self.header}")
 
@@ -112,7 +117,21 @@ class DisplayDevice(ABC):
 
     def run(self):
         self.logger.info("Display device running")
+        
+        # Initialize animation trigger system here (when service actually runs)
+        if self.animation_trigger is None:
+            self.animation_trigger = AnimationTrigger()
+            self.animation_trigger.start_monitoring()
+            self.logger.info("Animation trigger system initialized")
+        
         while True:
+            # Check for triggered animations
+            if self.animation_trigger.has_pending_animation():
+                animation_path = self.animation_trigger.get_next_animation()
+                if animation_path:
+                    self.logger.info(f"Playing triggered animation: {animation_path}")
+                    self._play_animation(animation_path)
+            
             img, delay_time = self._get_generator().get_frame_with_duration()
             # Apply rotation if configured (Pillow rotates counter-clockwise)
             try:
@@ -131,6 +150,55 @@ class DisplayDevice(ABC):
             for packet in frame_packets:
                 self.send_packet(packet)
             time.sleep(delay_time)
+    
+    def _play_animation(self, animation_path):
+        """Play a one-time animation from a file"""
+        try:
+            import cv2
+            
+            # Open video file
+            cap = cv2.VideoCapture(animation_path)
+            if not cap.isOpened():
+                self.logger.error(f"Failed to open animation: {animation_path}")
+                return
+            
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            frame_delay = 1.0 / fps
+            
+            self.logger.info(f"Playing animation at {fps} FPS")
+            
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Convert BGR to RGB
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(frame_rgb)
+                
+                # Resize to display dimensions
+                img = img.resize((self.width, self.height), Image.Resampling.LANCZOS)
+                
+                # Apply rotation
+                if self.rotation == 180:
+                    img = img.rotate(180, expand=False)
+                elif self.rotation % 360 != 0:
+                    img = img.rotate(self.rotation, expand=False)
+                
+                # Send to display
+                header = self.get_header()
+                img_bytes = header + self._encode_image(img)
+                frame_packets = self._prepare_frame_packets(img_bytes)
+                for packet in frame_packets:
+                    self.send_packet(packet)
+                
+                time.sleep(frame_delay)
+            
+            cap.release()
+            self.logger.info(f"Animation finished: {animation_path}")
+        
+        except Exception as e:
+            self.logger.error(f"Error playing animation: {e}")
 
     @abstractmethod
     def send_packet(self, packet: bytes):

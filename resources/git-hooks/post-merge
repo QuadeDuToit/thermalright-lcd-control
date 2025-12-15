@@ -1,0 +1,11 @@
+#!/bin/sh
+# Git hook: post-merge (triggers after 'git pull')
+# Place this file in .git/hooks/post-merge and make it executable
+
+# Path to your animation file
+ANIMATION="/usr/share/thermalright-lcd-control/animations/git-pull.mp4"
+
+# Trigger the animation (if file exists)
+if [ -f "$ANIMATION" ]; then
+    thermalright-lcd-trigger --play-animation "$ANIMATION" &
+fi

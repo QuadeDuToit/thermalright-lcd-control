@@ -14,7 +14,9 @@ def run_service(config_dir: str):
         if device is None:
             logger.error(f"No device found", exc_info=True)
             exit(1)
+        logger.info("Device loaded successfully, resetting...")
         device.reset()
+        logger.info("Device reset complete, starting main loop...")
         device.run()
     except KeyboardInterrupt:
         logger.info("Device controller service stopped by user")
